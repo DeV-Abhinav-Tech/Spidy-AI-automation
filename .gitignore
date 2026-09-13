@@ -14,7 +14,8 @@ ENV/
 # Environment & Database
 .env
 *.db
-tasks.db
+!tasks.db
+!backend/tasks.db
 
 # Build outputs
 frontend/dist/

@@ -4,13 +4,30 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Handle DATABASE_URL with validation against empty or unparseable strings
 db_url_env = os.getenv("DATABASE_URL", "").strip()
-if not db_url_env or db_url_env.startswith("[") or len(db_url_env) < 5:
-    if os.getenv("VERCEL"):
+if os.getenv("VERCEL"):
+    # On Vercel serverless environment, paths like ./tasks.db are strictly read-only.
+    # We must use /tmp/tasks.db for SQLite unless an external cloud database (e.g. postgresql://) is provided.
+    if not db_url_env or "sqlite" in db_url_env.lower() or db_url_env.startswith("[") or len(db_url_env) < 5:
         DATABASE_URL = "sqlite:////tmp/tasks.db"
     else:
-        DATABASE_URL = "sqlite:///./tasks.db"
+        DATABASE_URL = db_url_env
 else:
-    DATABASE_URL = db_url_env
+    if not db_url_env or db_url_env.startswith("[") or len(db_url_env) < 5:
+        DATABASE_URL = "sqlite:///./tasks.db"
+    else:
+        DATABASE_URL = db_url_env
+
+if os.getenv("VERCEL") and DATABASE_URL == "sqlite:////tmp/tasks.db":
+    import shutil
+    try:
+        if not os.path.exists("/tmp/tasks.db"):
+            for candidate in ["./tasks.db", "./backend/tasks.db", "/var/task/tasks.db", "/var/task/backend/tasks.db"]:
+                if os.path.exists(candidate):
+                    shutil.copy2(candidate, "/tmp/tasks.db")
+                    print(f"[DB Bootstrap] Copied {candidate} to /tmp/tasks.db")
+                    break
+    except Exception as copy_err:
+        print(f"[DB Bootstrap Notice]: {copy_err}")
 
 try:
     connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
@@ -64,6 +81,16 @@ def ensure_db_schema():
                 db.add(new_user)
             elif not existing.password_hash:
                 existing.password_hash = hash_password(acc["password"])
+        # Pre-seed previous tasks from earlier session
+        try:
+            try:
+                from app.database.seed_data import seed_previous_data
+            except ImportError:
+                from backend.app.database.seed_data import seed_previous_data
+            seed_previous_data(db)
+        except Exception as seed_err:
+            print(f"[Seed Previous Data Notice]: {seed_err}")
+
         db.commit()
         db.close()
     except Exception as e:
