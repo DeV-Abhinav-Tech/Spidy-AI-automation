@@ -64,9 +64,23 @@ def ensure_db_schema():
     except Exception as e:
         print(f"[Seed Demo Users Notice]: {e}")
 
+_db_initialized = False
+
+def init_db_if_needed():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            Base.metadata.create_all(bind=engine)
+            ensure_db_schema()
+            _db_initialized = True
+        except Exception as e:
+            print(f"[DB Init Notice]: {e}")
+
 def get_db():
+    init_db_if_needed()
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+

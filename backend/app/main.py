@@ -40,11 +40,13 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
+app_lifespan = None if os.getenv("VERCEL") else lifespan
+
 app = FastAPI(
     title="Spidy Task Automation Assistant API",
     description="Backend API for task management, natural language tool-calling, AI task breakdown, autonomous subtask solver, and prioritization.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=app_lifespan
 )
 
 # Configure CORS for Vite React frontend
