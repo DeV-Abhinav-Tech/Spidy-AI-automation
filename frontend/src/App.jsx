@@ -18,6 +18,11 @@ import {
   getCurrentUser,
   loginUser 
 } from './services/api';
+import {
+  syncTaskToFirestore,
+  deleteTaskFromFirestore,
+  logoutFirebase
+} from './services/firebase';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -82,6 +87,7 @@ function App() {
 
   // Handle Logout
   const handleLogout = () => {
+    logoutFirebase().catch(console.warn);
     localStorage.removeItem('spidy_user_email');
     localStorage.removeItem('spidy_user_name');
     localStorage.removeItem('spidy_auth_token');
@@ -94,10 +100,14 @@ function App() {
   // Task Actions
   const handleCreateOrUpdateTask = async (taskData) => {
     try {
+      let savedTask;
       if (selectedTask) {
-        await updateTask(selectedTask.id, taskData);
+        savedTask = await updateTask(selectedTask.id, taskData);
       } else {
-        await createTask(taskData);
+        savedTask = await createTask(taskData);
+      }
+      if (currentUser?.email && savedTask) {
+        syncTaskToFirestore(currentUser.email, savedTask).catch(console.warn);
       }
       setSelectedTask(null);
       loadTasks();
@@ -108,7 +118,10 @@ function App() {
 
   const handleCompleteTask = async (taskId) => {
     try {
-      await completeTask(taskId);
+      const updated = await completeTask(taskId);
+      if (currentUser?.email && updated) {
+        syncTaskToFirestore(currentUser.email, updated).catch(console.warn);
+      }
       loadTasks();
     } catch (err) {
       alert(`Complete task failed: ${err.message}`);
@@ -119,6 +132,9 @@ function App() {
     if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
       await deleteTask(taskId);
+      if (currentUser?.email) {
+        deleteTaskFromFirestore(currentUser.email, taskId).catch(console.warn);
+      }
       loadTasks();
     } catch (err) {
       alert(`Delete task failed: ${err.message}`);

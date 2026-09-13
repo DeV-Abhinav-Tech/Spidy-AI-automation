@@ -1,6 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Server, Cpu, Database, Wrench, CheckCircle2, AlertCircle, UserCheck, Key, TrendingUp, Sparkles, Activity, Zap } from 'lucide-react';
+import { 
+  ShieldCheck, 
+  Server, 
+  Cpu, 
+  Database, 
+  Wrench, 
+  CheckCircle2, 
+  AlertCircle, 
+  UserCheck, 
+  Key, 
+  TrendingUp, 
+  Sparkles, 
+  Activity, 
+  Zap,
+  Flame,
+  ExternalLink,
+  RefreshCw,
+  Trash2,
+  Lock
+} from 'lucide-react';
 import { fetchHealth, fetchUserAnalytics, updateUserCredentials } from '../services/api';
+import { 
+  getActiveFirebaseConfig, 
+  saveFirebaseConfig, 
+  isFirebaseConfigured, 
+  initFirebase 
+} from '../services/firebase';
 
 const SettingsView = ({ currentUserEmail, onOpenUserAuth }) => {
   const [health, setHealth] = useState(null);
@@ -8,6 +33,19 @@ const SettingsView = ({ currentUserEmail, onOpenUserAuth }) => {
   const [loading, setLoading] = useState(true);
   const [newCredentials, setNewCredentials] = useState('');
   const [savingCreds, setSavingCreds] = useState(false);
+
+  // Firebase Configuration State
+  const [firebaseConfig, setFirebaseConfig] = useState({
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
+    appId: ''
+  });
+  const [firebaseActive, setFirebaseActive] = useState(false);
+  const [firebaseSaving, setFirebaseSaving] = useState(false);
+  const [firebaseStatusMsg, setFirebaseStatusMsg] = useState(null);
 
   const loadData = async () => {
     try {
@@ -24,8 +62,19 @@ const SettingsView = ({ currentUserEmail, onOpenUserAuth }) => {
     }
   };
 
+  const loadFirebaseState = () => {
+    const cfg = getActiveFirebaseConfig();
+    setFirebaseConfig(cfg);
+    setFirebaseActive(isFirebaseConfigured());
+  };
+
   useEffect(() => {
     loadData();
+    loadFirebaseState();
+
+    const handleConfigUpdate = () => loadFirebaseState();
+    window.addEventListener('spidy_firebase_config_updated', handleConfigUpdate);
+    return () => window.removeEventListener('spidy_firebase_config_updated', handleConfigUpdate);
   }, [currentUserEmail]);
 
   const handleUpdateCreds = async (e) => {
@@ -42,6 +91,45 @@ const SettingsView = ({ currentUserEmail, onOpenUserAuth }) => {
       alert(`Failed to save credentials: ${err.message}`);
     } finally {
       setSavingCreds(false);
+    }
+  };
+
+  const handleSaveFirebase = (e) => {
+    e.preventDefault();
+    setFirebaseSaving(true);
+    try {
+      saveFirebaseConfig(firebaseConfig);
+      initFirebase();
+      setFirebaseActive(isFirebaseConfigured());
+      setFirebaseStatusMsg({ type: 'success', text: 'Firebase credentials saved & services synchronized!' });
+      setTimeout(() => setFirebaseStatusMsg(null), 4000);
+    } catch (err) {
+      setFirebaseStatusMsg({ type: 'error', text: `Failed to save Firebase config: ${err.message}` });
+    } finally {
+      setFirebaseSaving(false);
+    }
+  };
+
+  const handleClearFirebase = () => {
+    if (!window.confirm('Clear custom Firebase credentials and revert to defaults?')) return;
+    localStorage.removeItem('spidy_firebase_config');
+    loadFirebaseState();
+    initFirebase();
+    setFirebaseStatusMsg({ type: 'info', text: 'Custom Firebase configuration cleared.' });
+    setTimeout(() => setFirebaseStatusMsg(null), 3000);
+  };
+
+  const handleTestFirebase = () => {
+    try {
+      const { auth, db } = initFirebase();
+      if (auth && db) {
+        setFirebaseStatusMsg({ type: 'success', text: 'Firebase SDK initialized successfully (Auth & Firestore ready)!' });
+      } else {
+        setFirebaseStatusMsg({ type: 'warning', text: 'Firebase is not yet fully configured. Fill in Project ID & API Key.' });
+      }
+      setTimeout(() => setFirebaseStatusMsg(null), 4000);
+    } catch (err) {
+      setFirebaseStatusMsg({ type: 'error', text: `Firebase test failed: ${err.message}` });
     }
   };
 
@@ -152,6 +240,180 @@ const SettingsView = ({ currentUserEmail, onOpenUserAuth }) => {
             <button onClick={onOpenUserAuth} className="btn-primary text-xs py-1 px-3">Set Identity</button>
           </div>
         )}
+      </div>
+
+      {/* Firebase Cloud Sync & Authentication Hub */}
+      <div className="glass-panel rounded-3xl p-6 border-2 border-amber-500/30 bg-[#070b16]/90 space-y-6 shadow-2xl relative overflow-hidden">
+        {/* Subtle decorative glow */}
+        <div className="absolute -top-16 -right-16 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-amber-900/40 border border-amber-400/40">
+              <Flame className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-white text-base">Firebase Cloud & Google Auth Bridge</h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${firebaseActive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/20' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+                  {firebaseActive ? '🔥 Connected & Online' : '⚠️ Offline / Unconfigured'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">1-Click Google Sign-In, Firebase Email Auth, and Real-time Firestore Mission Sync</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <a
+              href="https://console.firebase.google.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 border-amber-500/30 text-amber-300 hover:bg-amber-950/30 cursor-pointer"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Firebase Console</span>
+            </a>
+          </div>
+        </div>
+
+        {/* Status Notification Message */}
+        {firebaseStatusMsg && (
+          <div className={`p-3 rounded-xl text-xs font-mono flex items-center gap-2 border ${
+            firebaseStatusMsg.type === 'success' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' :
+            firebaseStatusMsg.type === 'error' ? 'bg-rose-950/60 border-rose-500/40 text-rose-300' :
+            'bg-amber-950/60 border-amber-500/40 text-amber-300'
+          }`}>
+            {firebaseStatusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+            <span>{firebaseStatusMsg.text}</span>
+          </div>
+        )}
+
+        {/* Firebase Config Form */}
+        <form onSubmit={handleSaveFirebase} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                apiKey <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.apiKey}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, apiKey: e.target.value })}
+                placeholder="AIzaSy..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                projectId <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.projectId}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, projectId: e.target.value })}
+                placeholder="spidy-ai-automation"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                authDomain
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.authDomain}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, authDomain: e.target.value })}
+                placeholder="spidy-ai-automation.firebaseapp.com"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                appId
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.appId}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, appId: e.target.value })}
+                placeholder="1:123456789:web:abcdef..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                storageBucket
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.storageBucket}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, storageBucket: e.target.value })}
+                placeholder="spidy-ai-automation.appspot.com"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                messagingSenderId
+              </label>
+              <input
+                type="text"
+                value={firebaseConfig.messagingSenderId}
+                onChange={(e) => setFirebaseConfig({ ...firebaseConfig, messagingSenderId: e.target.value })}
+                placeholder="1234567890"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={firebaseSaving}
+                className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-900/40 bg-gradient-to-r from-amber-600 to-rose-600 border-amber-400/30"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-200" />
+                <span>{firebaseSaving ? 'Saving...' : 'Save & Connect Firebase'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestFirebase}
+                className="btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 border-slate-700 text-slate-300 hover:bg-slate-900 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Test Link</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearFirebase}
+              className="text-xs text-slate-500 hover:text-rose-400 flex items-center gap-1 cursor-pointer transition py-1 px-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear Saved Config</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Quick Instructions Badge */}
+        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800/80 text-[11px] text-slate-400 space-y-1.5">
+          <p className="font-bold text-slate-300 flex items-center gap-1.5 font-mono">
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> Quick Firebase Setup in 3 Steps:
+          </p>
+          <ol className="list-decimal list-inside space-y-1 pl-1 text-slate-400">
+            <li>Open <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-amber-400 underline">console.firebase.google.com</a> & click <strong>Add Project</strong>.</li>
+            <li>In <strong>Authentication &rarr; Sign-in method</strong>, enable <strong>Google</strong> and <strong>Email/Password</strong>.</li>
+            <li>In <strong>Project Settings &rarr; Your apps</strong>, click <strong>Web (&lt;/&gt;)</strong>, copy the keys and paste above or set as Vercel env variables!</li>
+          </ol>
+        </div>
       </div>
 
       {/* Backend Status Box */}

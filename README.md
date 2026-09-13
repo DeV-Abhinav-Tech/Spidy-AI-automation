@@ -66,9 +66,34 @@ npm run dev -- --port 5173
 
 ---
 
+## 🔥 Firebase Cloud Sync & Google Authentication
+
+Spidy AI Automation features native **Firebase** connectivity for 1-click Google Sign-In and real-time Cloud Firestore synchronization:
+
+### 1. In-App Setup (No Rebuild Required)
+1. Open the web app and navigate to **Suit Diagnostics & Identity Hub** (Settings tab).
+2. Under **Firebase Cloud & Google Auth Bridge**, paste your project credentials:
+   - `apiKey`, `projectId`, `authDomain`, `appId`, `storageBucket`, `messagingSenderId`
+3. Click **Save & Connect Firebase** or **Test Link**.
+
+### 2. Environment Variables (Vercel & Local)
+Add the following to your `.env` or Vercel Environment Variables:
+```bash
+VITE_FIREBASE_API_KEY="AIzaSy..."
+VITE_FIREBASE_AUTH_DOMAIN="spidy-ai-automation.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="spidy-ai-automation"
+VITE_FIREBASE_STORAGE_BUCKET="spidy-ai-automation.appspot.com"
+VITE_FIREBASE_MESSAGING_SENDER_ID="1234567890"
+VITE_FIREBASE_APP_ID="1:1234567890:web:abcdef..."
+```
+
+---
+
 ## ☁️ Deploy to Vercel
 
-This repository is pre-configured for fullstack deployment on **Vercel** via [`vercel.json`](vercel.json) and serverless Python function entrypoint [`api/index.py`](api/index.py).
+This repository is pre-configured for fullstack deployment on **Vercel** via [`vercel.json`](vercel.json) and root Python WSGI / ASGI routing.
+
+- **Live Production URL**: [https://spidy-ai-automation.vercel.app](https://spidy-ai-automation.vercel.app)
 
 ### Quick Deployment Steps:
 1. **Push to GitHub**: Push this repository to your GitHub account (`Spidy-AI-automation`).
@@ -78,9 +103,10 @@ This repository is pre-configured for fullstack deployment on **Vercel** via [`v
 3. **Environment Variables**:
    - In the Vercel project settings under **Environment Variables**, add:
      - `GEMINI_API_KEY`: Your Google Gemini API Key.
+     - *(Optional)* `VITE_FIREBASE_*`: Your Firebase project keys.
      - *(Optional)* `DATABASE_URL`: PostgreSQL connection string (e.g. Neon, Supabase). If omitted, SQLite operates in `/tmp/tasks.db`.
 4. **Deploy**:
-   - Click **Deploy**. Vercel will build the React Vite frontend and deploy the FastAPI backend as Serverless Functions at `/api/*`.
+   - Click **Deploy**. Vercel builds the React Vite frontend and deploys the FastAPI backend at `/api/*`.
 
 ---
 
