@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    ? ''
+    : 'http://127.0.0.1:8000'
+);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -11,14 +15,56 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const userEmail = localStorage.getItem('spidy_user_email');
+  const token = localStorage.getItem('spidy_auth_token');
   if (userEmail) {
     config.headers['X-User-Email'] = userEmail;
+  }
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
   return config;
 });
 
 export const fetchHealth = async () => {
-  const res = await api.get('/health');
+  try {
+    const res = await api.get('/api/health');
+    return res.data;
+  } catch {
+    const res = await api.get('/health');
+    return res.data;
+  }
+};
+
+export const registerUser = async (name, email, password, credentials = null) => {
+  const res = await api.post('/api/users/register', {
+    name,
+    email,
+    password,
+    credentials: credentials || null
+  });
+  return res.data;
+};
+
+export const loginUser = async (email, password = null, credentials = null) => {
+  const res = await api.post('/api/users/login', {
+    email,
+    password,
+    credentials: credentials || null
+  });
+  return res.data;
+};
+
+export const getCurrentUser = async () => {
+  const res = await api.get('/api/users/me');
+  return res.data;
+};
+
+export const changeUserPassword = async (email, oldPassword, newPassword) => {
+  const res = await api.post('/api/users/change-password', {
+    email,
+    old_password: oldPassword,
+    new_password: newPassword
+  });
   return res.data;
 };
 

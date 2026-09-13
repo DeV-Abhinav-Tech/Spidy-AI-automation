@@ -66,6 +66,34 @@ npm run dev -- --port 5173
 
 ---
 
+## ☁️ Deploy to Vercel
+
+This repository is pre-configured for fullstack deployment on **Vercel** via [`vercel.json`](vercel.json) and serverless Python function entrypoint [`api/index.py`](api/index.py).
+
+### Quick Deployment Steps:
+1. **Push to GitHub**: Push this repository to your GitHub account (`Spidy-AI-automation`).
+2. **Import in Vercel**:
+   - Go to [vercel.com/new](https://vercel.com/new) and import `Spidy-AI-automation`.
+   - Vercel automatically detects the root configuration and [`vercel.json`](vercel.json).
+3. **Environment Variables**:
+   - In the Vercel project settings under **Environment Variables**, add:
+     - `GEMINI_API_KEY`: Your Google Gemini API Key.
+     - *(Optional)* `DATABASE_URL`: PostgreSQL connection string (e.g. Neon, Supabase). If omitted, SQLite operates in `/tmp/tasks.db`.
+4. **Deploy**:
+   - Click **Deploy**. Vercel will build the React Vite frontend and deploy the FastAPI backend as Serverless Functions at `/api/*`.
+
+---
+
+## 🕸️ Spider-Man Costume Design & Suit HUD
+
+- **Spider-Man Suit Aesthetic**: Iconic crimson red (`#e11d48`), cobalt armor blue (`#2563eb`), and carbon-fiber black base (`#070a12`) with hexagonal fabric mesh.
+- **Expressive Mask Emblem**: Custom geometric mask with animated glowing white eye lenses.
+- **Karen Suit HUD**: Live telemetry displaying web fluid status, system diagnostics, and patrol count.
+- **Interactive Web Shooter**: Synthesizes 60FPS radial web spray animation with authentic "THWIP!" sound effects via Web Audio API.
+- **Spider-Sense Threat Matrix**: Real-time visual radar highlighting critical and overdue patrol missions.
+
+---
+
 ## 🌐 API Overview
 
 | Method | Endpoint | Description |

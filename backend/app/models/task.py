@@ -9,6 +9,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=True)
     credentials = Column(Text, nullable=True) # Custom Gemini API key or user credentials
     details = Column(Text, nullable=True) # JSON details / user analytics metadata
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

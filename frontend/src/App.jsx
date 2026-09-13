@@ -3,11 +3,21 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import TaskModal from './components/TaskModal';
 import UserAuthModal from './components/UserAuthModal';
+import UserProfileModal from './components/UserProfileModal';
+import SpiderWebIntro from './components/SpiderWebIntro';
 import DashboardView from './pages/DashboardView';
 import TasksView from './pages/TasksView';
 import AIAssistantView from './pages/AIAssistantView';
 import SettingsView from './pages/SettingsView';
-import { fetchTasks, createTask, updateTask, deleteTask, completeTask, loginOrRegisterUser } from './services/api';
+import { 
+  fetchTasks, 
+  createTask, 
+  updateTask, 
+  deleteTask, 
+  completeTask, 
+  getCurrentUser,
+  loginUser 
+} from './services/api';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -15,9 +25,42 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUserAuthOpen, setIsUserAuthOpen] = useState(false);
-  const [currentUserEmail, setCurrentUserEmail] = useState(localStorage.getItem('spidy_user_email') || 'student@example.com');
+  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const [showWebIntro, setShowWebIntro] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [initialAIPrompt, setInitialAIPrompt] = useState('');
+
+  // Initialize or restore user session
+  const initializeUserSession = async () => {
+    const savedEmail = localStorage.getItem('spidy_user_email');
+    if (savedEmail) {
+      try {
+        const userProfile = await getCurrentUser();
+        setCurrentUser(userProfile);
+      } catch (err) {
+        console.warn('Session verification error, trying auto-login:', err);
+        try {
+          const fallback = await loginUser(savedEmail);
+          setCurrentUser(fallback);
+        } catch (loginErr) {
+          console.warn('Authentication required:', loginErr);
+          setIsUserAuthOpen(true);
+        }
+      }
+    } else {
+      // Default to demo user for a frictionless out-of-the-box experience
+      try {
+        const demoUser = await loginUser('demo@spidy.ai', 'demo123');
+        localStorage.setItem('spidy_user_email', demoUser.email);
+        localStorage.setItem('spidy_user_name', demoUser.name);
+        if (demoUser.token) localStorage.setItem('spidy_auth_token', demoUser.token);
+        setCurrentUser(demoUser);
+      } catch (e) {
+        setIsUserAuthOpen(true);
+      }
+    }
+  };
 
   // Load Tasks from Backend API
   const loadTasks = async () => {
@@ -30,12 +73,23 @@ function App() {
   };
 
   useEffect(() => {
-    if (currentUserEmail) {
-      localStorage.setItem('spidy_user_email', currentUserEmail);
-      loginOrRegisterUser(currentUserEmail).catch(err => console.error(err));
-    }
+    initializeUserSession();
+  }, []);
+
+  useEffect(() => {
     loadTasks();
-  }, [searchQuery, currentUserEmail]);
+  }, [searchQuery, currentUser]);
+
+  // Handle Logout
+  const handleLogout = () => {
+    localStorage.removeItem('spidy_user_email');
+    localStorage.removeItem('spidy_user_name');
+    localStorage.removeItem('spidy_auth_token');
+    localStorage.removeItem('spidy_gemini_key');
+    setCurrentUser(null);
+    setIsUserProfileOpen(false);
+    setIsUserAuthOpen(true);
+  };
 
   // Task Actions
   const handleCreateOrUpdateTask = async (taskData) => {
@@ -86,9 +140,23 @@ function App() {
   const completedCount = tasks.filter(t => t.status === 'completed').length;
 
   return (
-    <div className="flex min-h-screen bg-[#0b0f19] text-slate-100 font-sans">
+    <div className="flex min-h-screen bg-[#0b0f19] text-slate-100 font-sans relative">
+      {/* Spider-Man Web Spray Opening Animation Overlay */}
+      {showWebIntro && (
+        <SpiderWebIntro
+          isOpen={showWebIntro}
+          onComplete={() => setShowWebIntro(false)}
+        />
+      )}
+
       {/* Navigation Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        currentUser={currentUser}
+        onOpenProfile={() => setIsUserProfileOpen(true)}
+        onOpenUserAuth={() => setIsUserAuthOpen(true)}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -102,8 +170,10 @@ function App() {
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           stats={{ pending: pendingCount, completed: completedCount }}
-          currentUserEmail={currentUserEmail}
+          currentUser={currentUser}
           onOpenUserAuth={() => setIsUserAuthOpen(true)}
+          onOpenProfile={() => setIsUserProfileOpen(true)}
+          onTriggerWebIntro={() => setShowWebIntro(true)}
         />
 
         <main className="flex-1 overflow-y-auto pb-12">
@@ -136,7 +206,7 @@ function App() {
 
           {activeTab === 'settings' && (
             <SettingsView
-              currentUserEmail={currentUserEmail}
+              currentUserEmail={currentUser?.email}
               onOpenUserAuth={() => setIsUserAuthOpen(true)}
             />
           )}
@@ -151,14 +221,25 @@ function App() {
         task={selectedTask}
       />
 
-      {/* User Authentication & Credentials Modal */}
+      {/* User Authentication & Login/Registration Modal */}
       <UserAuthModal
         isOpen={isUserAuthOpen}
         onClose={() => setIsUserAuthOpen(false)}
-        currentUserEmail={currentUserEmail}
+        currentUserEmail={currentUser?.email}
         onUserAuthenticated={(profile) => {
-          setCurrentUserEmail(profile.email);
+          setCurrentUser(profile);
           loadTasks();
+        }}
+      />
+
+      {/* User Profile & Account Drawer Modal */}
+      <UserProfileModal
+        isOpen={isUserProfileOpen}
+        onClose={() => setIsUserProfileOpen(false)}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onProfileUpdated={() => {
+          getCurrentUser().then(setCurrentUser).catch(console.error);
         }}
       />
     </div>

@@ -1,7 +1,15 @@
 # Dependencies
 node_modules/
+**/node_modules/
 **/__pycache__/
 *.pyc
+venv/
+backend/venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
 
 # Environment & Database
 .env
@@ -10,11 +18,14 @@ tasks.db
 
 # Build outputs
 frontend/dist/
+dist/
 frontend/dist-ssr/
 *.local
+.vercel/
 
 # IDE & OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+

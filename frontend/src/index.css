@@ -1,112 +1,176 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0b0f19;
-  --bg-secondary: #111827;
-  --bg-card: rgba(30, 41, 59, 0.7);
-  --bg-card-hover: rgba(30, 41, 59, 0.9);
-  --accent-primary: #6366f1;
-  --accent-secondary: #06b6d4;
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --border-color: rgba(255, 255, 255, 0.1);
+  /* Spider-Man Iconic Costume Palette */
+  --spidy-red: #e11d48;
+  --spidy-red-glow: #f43f5e;
+  --spidy-red-dark: #881337;
+  
+  --spidy-blue: #2563eb;
+  --spidy-blue-glow: #38bdf8;
+  --spidy-blue-dark: #1e3a8a;
+  
+  --spidy-web-white: #f8fafc;
+  --spidy-web-silver: rgba(248, 250, 252, 0.7);
+  --spidy-web-dim: rgba(248, 250, 252, 0.15);
+
+  --spider-sense-gold: #fbbf24;
+  --spider-sense-glow: rgba(251, 191, 36, 0.4);
+
+  /* Carbon Fiber & Suit Mesh Backgrounds */
+  --suit-carbon-base: #070a12;
+  --suit-carbon-card: rgba(13, 19, 33, 0.85);
+  --suit-carbon-hover: rgba(18, 26, 45, 0.95);
+  
+  --suit-gradient: linear-gradient(135deg, #e11d48 0%, #2563eb 100%);
+  --suit-gradient-hover: linear-gradient(135deg, #f43f5e 0%, #3b82f6 100%);
+  --suit-border-red: rgba(225, 29, 72, 0.35);
+  --suit-border-blue: rgba(37, 99, 235, 0.35);
+  --suit-border-web: rgba(248, 250, 252, 0.18);
+
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--suit-carbon-base);
+  /* High-Tech Hexagonal Suit Mesh Background */
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(225, 29, 72, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(37, 99, 235, 0.12) 0%, transparent 60%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+  color: var(--spidy-web-white);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* Glassmorphism utility */
+/* Spider-Man Suit Panel (Glassmorphism with Suit Seam & Web Borders) */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(10, 15, 28, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(225, 29, 72, 0.2);
+  box-shadow: 0 10px 35px -5px rgba(0, 0, 0, 0.6), 0 0 20px -8px rgba(37, 99, 235, 0.25);
+}
+
+/* Spider-Man Suit Mesh Card */
+.glass-card, .suit-card {
+  background: rgba(13, 20, 36, 0.75);
+  backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 1rem;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-.glass-card {
-  background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.75rem;
-  transition: all 0.2s ease-in-out;
+.glass-card:hover, .suit-card:hover {
+  background: rgba(18, 27, 48, 0.9);
+  border-color: rgba(225, 29, 72, 0.45);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -5px rgba(225, 29, 72, 0.25), 0 0 15px rgba(37, 99, 235, 0.2);
 }
 
-.glass-card:hover {
-  background: rgba(30, 41, 59, 0.8);
-  border-color: rgba(99, 102, 241, 0.3);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+/* Spidey Web Pattern Texture Background */
+.web-pattern-bg {
+  background-image: radial-gradient(circle at 10% 20%, rgba(225, 29, 72, 0.08) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(37, 99, 235, 0.1) 0%, transparent 40%),
+                    repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(255,255,255,0.02) 20px, rgba(255,255,255,0.02) 21px),
+                    repeating-linear-gradient(60deg, transparent, transparent 20px, rgba(255,255,255,0.02) 20px, rgba(255,255,255,0.02) 21px),
+                    repeating-linear-gradient(120deg, transparent, transparent 20px, rgba(255,255,255,0.02) 20px, rgba(255,255,255,0.02) 21px);
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Spider-Sense Pulsing Aura */
+.spider-sense-pulse {
+  animation: spiderSenseGlow 2s infinite ease-in-out;
 }
 
-::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.6);
+@keyframes spiderSenseGlow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), inset 0 0 8px rgba(251, 191, 36, 0.2);
+    border-color: rgba(251, 191, 36, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(225, 29, 72, 0.6), inset 0 0 14px rgba(225, 29, 72, 0.3);
+    border-color: rgba(225, 29, 72, 0.9);
+  }
 }
 
 /* Glowing text and buttons */
 .gradient-text {
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, #f43f5e 0%, #38bdf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
+.spidy-red-text {
+  background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Primary Web-Shooter Button (Crimson to Royal Blue Suit Gradient) */
 .btn-primary {
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, #e11d48 0%, #2563eb 100%);
   color: #ffffff;
-  font-weight: 600;
-  padding: 0.6rem 1.2rem;
-  border-radius: 0.5rem;
-  border: none;
+  font-weight: 700;
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px 0 rgba(225, 29, 72, 0.38), 0 0 10px 0 rgba(37, 99, 235, 0.3);
+  position: relative;
+  overflow: hidden;
 }
 
 .btn-primary:hover {
-  opacity: 0.95;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.55);
+  background: linear-gradient(135deg, #f43f5e 0%, #3b82f6 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px 0 rgba(225, 29, 72, 0.55), 0 0 18px 0 rgba(37, 99, 235, 0.45);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  font-weight: 500;
-  padding: 0.6rem 1.2rem;
-  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.7);
+  color: var(--spidy-web-white);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(225, 29, 72, 0.15);
+  border-color: rgba(225, 29, 72, 0.45);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Webbed Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(7, 10, 18, 0.9);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #e11d48, #2563eb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #f43f5e, #38bdf8);
 }
 
 /* Animations */
@@ -117,4 +181,9 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Spider-Man Mask Eye Lens Shape */
+.spidy-eye-lens {
+  clip-path: polygon(0% 15%, 75% 0%, 100% 55%, 35% 100%, 0% 85%);
 }

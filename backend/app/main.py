@@ -15,18 +15,30 @@ from app.services.reminder_service import start_reminder_scheduler
 async def lifespan(app: FastAPI):
     # Startup logic
     print("[FastAPI Startup] Creating database tables if needed...")
-    Base.metadata.create_all(bind=engine)
-    ensure_db_schema()
+    try:
+        Base.metadata.create_all(bind=engine)
+        ensure_db_schema()
+    except Exception as e:
+        print(f"[FastAPI Startup DB Notice]: {e}")
     
-    print("[FastAPI Startup] Initializing background reminder scheduler...")
-    scheduler = start_reminder_scheduler(interval_seconds=30)
+    scheduler = None
+    # Skip persistent background scheduler thread in serverless environments
+    if not os.getenv("VERCEL"):
+        try:
+            print("[FastAPI Startup] Initializing background reminder scheduler...")
+            scheduler = start_reminder_scheduler(interval_seconds=30)
+        except Exception as e:
+            print(f"[FastAPI Scheduler Notice]: {e}")
     
     yield
     
     # Shutdown logic
     if scheduler:
-        print("[FastAPI Shutdown] Shutting down scheduler...")
-        scheduler.shutdown()
+        try:
+            print("[FastAPI Shutdown] Shutting down scheduler...")
+            scheduler.shutdown()
+        except Exception:
+            pass
 
 app = FastAPI(
     title="Spidy Task Automation Assistant API",
