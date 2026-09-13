@@ -5,6 +5,7 @@ import {
   signInWithPopup, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
@@ -15,10 +16,23 @@ import {
   setDoc, 
   deleteDoc, 
   onSnapshot, 
-  query 
+  query,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 
-// Default Firebase config reads from environment variables or saved local settings
+// Default project configuration for spidy-task
+export const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC6Gr9EHvvV53wMptBV18YAxs2PKsbp0eM",
+  authDomain: "spidy-task.firebaseapp.com",
+  projectId: "spidy-task",
+  storageBucket: "spidy-task.firebasestorage.app",
+  messagingSenderId: "1033453207310",
+  appId: "1:1033453207310:web:01f6fc44e98b3a7f8ee15f",
+  measurementId: "G-TQPG80T1Y1"
+};
+
+// Retrieve active Firebase configuration with fallback
 export const getActiveFirebaseConfig = () => {
   try {
     const saved = localStorage.getItem('spidy_firebase_config');
@@ -32,20 +46,27 @@ export const getActiveFirebaseConfig = () => {
     console.warn('[Firebase Config Check]:', e);
   }
 
-  return {
+  // Check Vite environment variables, otherwise fall back to pre-configured spidy-task credentials
+  const envConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
     appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
   };
+
+  if (envConfig.apiKey && envConfig.projectId) {
+    return envConfig;
+  }
+
+  return DEFAULT_FIREBASE_CONFIG;
 };
 
 export const saveFirebaseConfig = (config) => {
   try {
     localStorage.setItem('spidy_firebase_config', JSON.stringify(config));
-    // Trigger window event so other components update immediately
     window.dispatchEvent(new Event('spidy_firebase_config_updated'));
     return true;
   } catch (e) {
@@ -88,43 +109,124 @@ export const initFirebase = () => {
   }
 };
 
-// Initial initialization attempt
+// Initialize immediately on bundle load
 initFirebase();
 
 // 1-Click Google Sign-In
 export const signInWithGoogle = async () => {
-  const { auth } = initFirebase();
+  const { auth, db } = initFirebase();
   if (!auth) {
-    throw new Error('Firebase credentials are not configured yet. Please configure your Firebase project in Suit Config.');
+    throw new Error('Firebase credentials are not configured.');
   }
   const result = await signInWithPopup(auth, googleProviderInstance);
   const user = result.user;
-  return {
+
+  const userProfile = {
+    uid: user.uid,
     email: user.email,
     displayName: user.displayName || 'Hero Spider-Agent',
     photoURL: user.photoURL,
-    uid: user.uid
+    provider: 'google',
+    lastLoginAt: new Date().toISOString()
   };
+
+  // Sync profile to Firestore
+  if (db) {
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, userProfile, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore User Profile Sync Notice]:', e);
+    }
+  }
+
+  return userProfile;
 };
 
 // Firebase Email Sign-In
 export const signInWithFirebase = async (email, password) => {
-  const { auth } = initFirebase();
+  const { auth, db } = initFirebase();
   if (!auth) {
     throw new Error('Firebase credentials are not configured.');
   }
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  return credential.user;
+  const user = credential.user;
+
+  const userProfile = {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName || email.split('@')[0],
+    provider: 'password',
+    lastLoginAt: new Date().toISOString()
+  };
+
+  if (db) {
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, userProfile, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore User Profile Sync Notice]:', e);
+    }
+  }
+
+  return userProfile;
 };
 
 // Firebase Email Sign-Up
-export const signUpWithFirebase = async (email, password) => {
-  const { auth } = initFirebase();
+export const signUpWithFirebase = async (name, email, password) => {
+  const { auth, db } = initFirebase();
   if (!auth) {
     throw new Error('Firebase credentials are not configured.');
   }
   const credential = await createUserWithEmailAndPassword(auth, email, password);
-  return credential.user;
+  const user = credential.user;
+
+  if (name && auth.currentUser) {
+    try {
+      await updateProfile(auth.currentUser, { displayName: name });
+    } catch (e) {
+      console.warn('[Firebase UpdateProfile]:', e);
+    }
+  }
+
+  const userProfile = {
+    uid: user.uid,
+    email: user.email,
+    displayName: name || user.displayName || email.split('@')[0],
+    provider: 'password',
+    createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString()
+  };
+
+  if (db) {
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, userProfile, { merge: true });
+    } catch (e) {
+      console.warn('[Firestore User Profile Sync Notice]:', e);
+    }
+  }
+
+  return userProfile;
+};
+
+// Firebase Auth State Observer
+export const subscribeToAuthState = (callback) => {
+  const { auth } = initFirebase();
+  if (!auth) return () => {};
+  return onAuthStateChanged(auth, (firebaseUser) => {
+    if (firebaseUser) {
+      callback({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Spider Hero',
+        photoURL: firebaseUser.photoURL,
+        isAnonymous: firebaseUser.isAnonymous
+      });
+    } else {
+      callback(null);
+    }
+  });
 };
 
 // Firebase Sign Out
@@ -136,42 +238,42 @@ export const logoutFirebase = async () => {
 };
 
 // Real-time Firestore Task Syncing
-export const syncTaskToFirestore = async (userEmail, task) => {
+export const syncTaskToFirestore = async (userId, task) => {
   const { db } = initFirebase();
-  if (!db || !userEmail || !task?.id) return;
+  if (!db || !userId || !task?.id) return;
   try {
-    const taskRef = doc(db, 'users', userEmail, 'tasks', String(task.id));
+    const taskRef = doc(db, 'users', String(userId), 'tasks', String(task.id));
     await setDoc(taskRef, {
       ...task,
       updated_at: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
-    console.warn('[Firestore Sync Notice]:', err);
+    console.warn('[Firestore Task Sync Notice]:', err);
   }
 };
 
-export const deleteTaskFromFirestore = async (userEmail, taskId) => {
+export const deleteTaskFromFirestore = async (userId, taskId) => {
   const { db } = initFirebase();
-  if (!db || !userEmail || !taskId) return;
+  if (!db || !userId || !taskId) return;
   try {
-    const taskRef = doc(db, 'users', userEmail, 'tasks', String(taskId));
+    const taskRef = doc(db, 'users', String(userId), 'tasks', String(taskId));
     await deleteDoc(taskRef);
   } catch (err) {
-    console.warn('[Firestore Delete Notice]:', err);
+    console.warn('[Firestore Task Delete Notice]:', err);
   }
 };
 
 // Listen to Firestore tasks in real time
-export const listenToFirestoreTasks = (userEmail, callback) => {
+export const listenToFirestoreTasks = (userId, callback) => {
   const { db } = initFirebase();
-  if (!db || !userEmail) return () => {};
+  if (!db || !userId) return () => {};
   try {
-    const tasksCollection = collection(db, 'users', userEmail, 'tasks');
+    const tasksCollection = collection(db, 'users', String(userId), 'tasks');
     const q = query(tasksCollection);
     return onSnapshot(q, (snapshot) => {
       const items = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() });
+      snapshot.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...docSnap.data() });
       });
       callback(items);
     }, (error) => {
@@ -180,5 +282,30 @@ export const listenToFirestoreTasks = (userEmail, callback) => {
   } catch (err) {
     console.warn('[Firestore Listener Error]:', err);
     return () => {};
+  }
+};
+
+// Seed default initial tasks into user's Firestore collection if empty
+export const seedInitialTasksToFirestore = async (userId, defaultTasks) => {
+  const { db } = initFirebase();
+  if (!db || !userId || !defaultTasks?.length) return;
+  try {
+    const tasksCollection = collection(db, 'users', String(userId), 'tasks');
+    const existing = await getDocs(tasksCollection);
+    if (!existing.empty) return; // Already has tasks
+
+    const batch = writeBatch(db);
+    defaultTasks.forEach((task) => {
+      const taskRef = doc(db, 'users', String(userId), 'tasks', String(task.id));
+      batch.set(taskRef, {
+        ...task,
+        created_at: task.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    });
+    await batch.commit();
+    console.log(`[Firestore] Successfully seeded ${defaultTasks.length} initial tasks for user ${userId}`);
+  } catch (err) {
+    console.warn('[Firestore Seed Notice]:', err);
   }
 };

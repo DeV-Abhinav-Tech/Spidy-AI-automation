@@ -5,7 +5,12 @@ import {
   ChevronUp, AlertCircle, ArrowRight, Zap 
 } from 'lucide-react';
 import { loginUser, registerUser } from '../services/api';
-import { signInWithGoogle, isFirebaseConfigured } from '../services/firebase';
+import { 
+  signInWithGoogle, 
+  signInWithFirebase, 
+  signUpWithFirebase, 
+  isFirebaseConfigured 
+} from '../services/firebase';
 
 const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail }) => {
   const [mode, setMode] = useState('login'); // 'login' or 'register'
@@ -37,43 +42,72 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
 
   const strength = getPasswordStrength(password);
 
+  // Friendly error formatter
+  const formatAuthError = (err) => {
+    const code = err.code || '';
+    if (code === 'auth/email-already-in-use') {
+      return 'This email is already registered in Firebase. Please sign in instead.';
+    }
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      return 'Invalid email or password. Please verify your credentials.';
+    }
+    if (code === 'auth/user-not-found') {
+      return 'No account found with this email. Please create a hero profile first.';
+    }
+    if (code === 'auth/weak-password') {
+      return 'Password should be at least 6 characters.';
+    }
+    if (code === 'auth/invalid-email') {
+      return 'The email address format is invalid.';
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      return 'Google sign-in popup was closed before completing.';
+    }
+    return err.response?.data?.detail || err.message || 'Authentication failed. Please check credentials.';
+  };
+
   // 1-Click Google Sign-In via Firebase
   const handleGoogleSignIn = async () => {
     setError('');
     setLoading(true);
     try {
       if (!isFirebaseConfigured()) {
-        setError('Firebase is not yet configured. Please enter your Firebase project keys in Suit Config / Settings.');
+        setError('Firebase project is initializing. Please retry in a moment.');
         setLoading(false);
         return;
       }
       const googleUser = await signInWithGoogle();
-      let userProfile;
+      
+      // Also register or sync with backend API if available
       try {
-        userProfile = await loginUser(googleUser.email, null, credentials.trim() || null);
+        await loginUser(googleUser.email, null, credentials.trim() || null);
       } catch {
-        // If user doesn't exist yet, auto-register
-        userProfile = await registerUser(
-          googleUser.displayName || 'Spider Agent', 
-          googleUser.email, 
-          'firebase_google_auth', 
-          credentials.trim() || null
-        );
+        try {
+          await registerUser(
+            googleUser.displayName || 'Spider Agent', 
+            googleUser.email, 
+            'firebase_google_auth', 
+            credentials.trim() || null
+          );
+        } catch (e) {
+          // Backend offline or running standalone on Vercel
+          console.log('[Backend sync skipped]: Running Firebase serverless mode');
+        }
       }
 
-      localStorage.setItem('spidy_user_email', userProfile.email);
-      localStorage.setItem('spidy_user_name', userProfile.name || googleUser.displayName);
-      if (userProfile.token) {
-        localStorage.setItem('spidy_auth_token', userProfile.token);
+      localStorage.setItem('spidy_user_email', googleUser.email);
+      localStorage.setItem('spidy_user_name', googleUser.displayName || 'Spider Agent');
+      if (googleUser.uid) {
+        localStorage.setItem('spidy_user_uid', googleUser.uid);
       }
       if (credentials.trim()) {
         localStorage.setItem('spidy_gemini_key', credentials.trim());
       }
-      onUserAuthenticated(userProfile);
+      onUserAuthenticated(googleUser);
       onClose();
     } catch (err) {
       console.error('[Google Sign In Error]:', err);
-      setError(err.message || 'Google Authentication failed.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -98,25 +132,64 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
     setLoading(true);
 
     try {
-      let userProfile;
-      if (mode === 'register') {
-        userProfile = await registerUser(
-          name.trim(),
-          email.trim(),
-          password.trim(),
-          credentials.trim() || null
-        );
-      } else {
-        userProfile = await loginUser(
-          email.trim(),
-          password.trim() || null,
-          credentials.trim() || null
-        );
+      let userProfile = null;
+
+      // Primary: Firebase Authentication
+      if (isFirebaseConfigured()) {
+        try {
+          if (mode === 'register') {
+            userProfile = await signUpWithFirebase(name.trim(), email.trim(), password.trim());
+          } else {
+            userProfile = await signInWithFirebase(email.trim(), password.trim());
+          }
+        } catch (fbErr) {
+          // If demo accounts are clicked that don't exist yet in Firebase, fall through to backend
+          const isDemo = email.includes('demo@') || email.includes('student@');
+          if (!isDemo && fbErr.code) {
+            throw fbErr;
+          }
+          console.warn('[Firebase Auth fallback to backend]:', fbErr.message);
+        }
       }
 
-      // Store identity & token in local storage
+      // Hybrid Backend API Sync (if backend server is reachable)
+      try {
+        let apiProfile;
+        if (mode === 'register') {
+          apiProfile = await registerUser(
+            name.trim(),
+            email.trim(),
+            password.trim(),
+            credentials.trim() || null
+          );
+        } else {
+          apiProfile = await loginUser(
+            email.trim(),
+            password.trim() || null,
+            credentials.trim() || null
+          );
+        }
+        if (apiProfile) {
+          userProfile = { ...(userProfile || {}), ...apiProfile };
+        }
+      } catch (apiErr) {
+        console.log('[Backend API Notice]: Operating in direct Firebase Cloud mode');
+      }
+
+      if (!userProfile) {
+        userProfile = {
+          email: email.trim(),
+          displayName: name.trim() || email.split('@')[0],
+          name: name.trim() || email.split('@')[0]
+        };
+      }
+
+      // Store identity & tokens in local storage
       localStorage.setItem('spidy_user_email', userProfile.email);
-      localStorage.setItem('spidy_user_name', userProfile.name);
+      localStorage.setItem('spidy_user_name', userProfile.displayName || userProfile.name || 'Spider Hero');
+      if (userProfile.uid) {
+        localStorage.setItem('spidy_user_uid', userProfile.uid);
+      }
       if (userProfile.token) {
         localStorage.setItem('spidy_auth_token', userProfile.token);
       }
@@ -129,8 +202,8 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
       onUserAuthenticated(userProfile);
       onClose();
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Authentication failed. Please check credentials.';
-      setError(msg);
+      console.error('[Auth Submit Error]:', err);
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -163,12 +236,12 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
                 </h3>
                 {firebaseReady && (
                   <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-mono border border-amber-500/40 flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" /> Firebase
+                    <Sparkles className="w-2.5 h-2.5" /> Firebase (spidy-task)
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400 font-mono">
-                {mode === 'login' ? 'Authenticate for Spider-Sense Task Command' : 'Initialize Stark Industries task protocol'}
+                {mode === 'login' ? 'Firebase Auth & Cloud Firestore Backend' : 'Initialize Stark Industries task protocol'}
               </p>
             </div>
           </div>
@@ -186,7 +259,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
             type="button"
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs tracking-wide transition-all shadow-lg shadow-white/5 border border-slate-200 active:scale-[0.98] cursor-pointer"
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs tracking-wide transition-all shadow-lg shadow-white/5 border border-slate-200 active:scale-[0.98] cursor-pointer disabled:opacity-50"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -199,7 +272,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
           
           <div className="flex items-center gap-3 py-1">
             <div className="h-px bg-slate-800/80 flex-1" />
-            <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">OR WITH STARK PASSWORD</span>
+            <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">OR EMAIL & PASSWORD</span>
             <div className="h-px bg-slate-800/80 flex-1" />
           </div>
         </div>
@@ -215,7 +288,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Sign In
+            Firebase Sign In
           </button>
           <button
             type="button"
@@ -226,13 +299,13 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Create Hero Profile
+            Create Hero Account
           </button>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-start gap-2.5">
+          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-start gap-2.5 animate-fade-in">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -245,14 +318,14 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
             <div className="space-y-1.5 animate-fade-in">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Full Name</span>
+                <span>Hero / Agent Name</span>
               </label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Abhinav Sharma"
+                placeholder="e.g. Peter Parker"
                 className="w-full bg-slate-950/90 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
               />
             </div>
@@ -269,7 +342,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. user@example.com"
+              placeholder="e.g. hero@spidy.ai"
               className="w-full bg-slate-950/90 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition"
             />
           </div>
@@ -342,7 +415,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
                 <p className="text-[10px] text-slate-500">
-                  Optional: Provide your own Google Gemini API key or leave blank to use the server's default configuration.
+                  Optional: Provide your Google Gemini API key for Spider AI automation tasks.
                 </p>
               </div>
             )}
@@ -357,7 +430,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
             >
               <ShieldCheck className="w-4 h-4" />
               <span>
-                {loading ? 'Authenticating...' : mode === 'login' ? 'Authorize Suit Access' : 'Register Hero Clearance'}
+                {loading ? 'Authenticating Firebase...' : mode === 'login' ? 'Authorize Firebase Access' : 'Register Firebase Account'}
               </span>
             </button>
           </div>
@@ -367,7 +440,7 @@ const UserAuthModal = ({ isOpen, onClose, onUserAuthenticated, currentUserEmail 
         <div className="pt-2 border-t border-rose-900/30">
           <p className="text-[11px] font-mono font-bold text-slate-400 mb-2 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-            <span>INSTANT SUIT PRESET LOGINS:</span>
+            <span>INSTANT TEST SUIT PRESETS:</span>
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button

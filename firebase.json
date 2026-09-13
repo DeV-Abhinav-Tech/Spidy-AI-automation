@@ -1,0 +1,14 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Spidy Task Automation",
+        "supportEmail": "abhinavshrm2017@gmail.com"
+      }
+    }
+  }
+}

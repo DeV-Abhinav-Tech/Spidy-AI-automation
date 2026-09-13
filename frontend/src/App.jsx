@@ -9,6 +9,7 @@ import DashboardView from './pages/DashboardView';
 import TasksView from './pages/TasksView';
 import AIAssistantView from './pages/AIAssistantView';
 import SettingsView from './pages/SettingsView';
+import defaultTasksData from './data/defaultTasks.json';
 import { 
   fetchTasks, 
   createTask, 
@@ -21,12 +22,15 @@ import {
 import {
   syncTaskToFirestore,
   deleteTaskFromFirestore,
+  listenToFirestoreTasks,
+  seedInitialTasksToFirestore,
+  subscribeToAuthState,
   logoutFirebase
 } from './services/firebase';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(defaultTasksData || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUserAuthOpen, setIsUserAuthOpen] = useState(false);
@@ -36,44 +40,89 @@ function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [initialAIPrompt, setInitialAIPrompt] = useState('');
 
-  // Initialize or restore user session
-  const initializeUserSession = async () => {
-    const savedEmail = localStorage.getItem('spidy_user_email');
-    if (savedEmail) {
-      try {
-        const userProfile = await getCurrentUser();
-        setCurrentUser(userProfile);
-      } catch (err) {
-        console.warn('Session verification error, trying auto-login:', err);
-        try {
-          const fallback = await loginUser(savedEmail);
-          setCurrentUser(fallback);
-        } catch (loginErr) {
-          console.warn('Authentication required:', loginErr);
-          setIsUserAuthOpen(true);
+  // 1. Subscribe to Firebase Auth state
+  useEffect(() => {
+    const unsubscribeAuth = subscribeToAuthState((firebaseUser) => {
+      if (firebaseUser) {
+        setCurrentUser(prev => ({
+          ...(prev || {}),
+          ...firebaseUser,
+          name: firebaseUser.displayName || prev?.name || 'Spider Hero'
+        }));
+        localStorage.setItem('spidy_user_email', firebaseUser.email);
+        localStorage.setItem('spidy_user_name', firebaseUser.displayName || 'Spider Hero');
+        if (firebaseUser.uid) {
+          localStorage.setItem('spidy_user_uid', firebaseUser.uid);
         }
       }
-    } else {
-      // Default to demo user for a frictionless out-of-the-box experience
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. Initialize or restore session from localStorage or demo
+  const initializeUserSession = async () => {
+    const savedEmail = localStorage.getItem('spidy_user_email');
+    const savedName = localStorage.getItem('spidy_user_name');
+    const savedUid = localStorage.getItem('spidy_user_uid');
+
+    if (savedEmail) {
+      setCurrentUser({
+        email: savedEmail,
+        name: savedName || 'Spider Hero',
+        displayName: savedName || 'Spider Hero',
+        uid: savedUid || savedEmail
+      });
       try {
-        const demoUser = await loginUser('demo@spidy.ai', 'demo123');
-        localStorage.setItem('spidy_user_email', demoUser.email);
-        localStorage.setItem('spidy_user_name', demoUser.name);
-        if (demoUser.token) localStorage.setItem('spidy_auth_token', demoUser.token);
-        setCurrentUser(demoUser);
-      } catch (e) {
-        setIsUserAuthOpen(true);
+        const userProfile = await getCurrentUser();
+        setCurrentUser(prev => ({ ...(prev || {}), ...userProfile }));
+      } catch (err) {
+        console.log('[Direct Firebase Mode]: Session restored locally');
       }
+    } else {
+      // Out-of-the-box demo agent
+      const demoUser = {
+        email: 'demo@spidy.ai',
+        name: 'Spider Hero',
+        displayName: 'Spider Hero',
+        uid: 'demo-hero-uid'
+      };
+      localStorage.setItem('spidy_user_email', demoUser.email);
+      localStorage.setItem('spidy_user_name', demoUser.name);
+      localStorage.setItem('spidy_user_uid', demoUser.uid);
+      setCurrentUser(demoUser);
     }
   };
 
-  // Load Tasks from Backend API
+  // 3. Real-time Firestore sync for tasks
+  useEffect(() => {
+    const userIdentifier = currentUser?.uid || currentUser?.email;
+    if (!userIdentifier) return;
+
+    // Listen to real-time changes in Firestore
+    const unsubscribeFirestore = listenToFirestoreTasks(userIdentifier, (firestoreTasks) => {
+      if (firestoreTasks && firestoreTasks.length > 0) {
+        setTasks(firestoreTasks);
+      } else {
+        // Seed default 25 tasks into user's Firestore on first connection
+        seedInitialTasksToFirestore(userIdentifier, defaultTasksData);
+        setTasks(defaultTasksData);
+      }
+    });
+
+    return () => unsubscribeFirestore();
+  }, [currentUser?.uid, currentUser?.email]);
+
+  // 4. Load Tasks from Backend API (if available) with fallback to default tasks
   const loadTasks = async () => {
     try {
       const data = await fetchTasks({ search: searchQuery || undefined });
-      setTasks(data);
+      if (data && data.length > 0) {
+        setTasks(data);
+        return;
+      }
     } catch (err) {
-      console.error("Failed to load tasks:", err);
+      console.log('[Direct Firebase Mode]: Serving tasks from Cloud Firestore / cache');
     }
   };
 
@@ -90,6 +139,7 @@ function App() {
     logoutFirebase().catch(console.warn);
     localStorage.removeItem('spidy_user_email');
     localStorage.removeItem('spidy_user_name');
+    localStorage.removeItem('spidy_user_uid');
     localStorage.removeItem('spidy_auth_token');
     localStorage.removeItem('spidy_gemini_key');
     setCurrentUser(null);
@@ -100,16 +150,41 @@ function App() {
   // Task Actions
   const handleCreateOrUpdateTask = async (taskData) => {
     try {
-      let savedTask;
-      if (selectedTask) {
-        savedTask = await updateTask(selectedTask.id, taskData);
-      } else {
-        savedTask = await createTask(taskData);
+      const userIdentifier = currentUser?.uid || currentUser?.email;
+      let savedTask = null;
+      try {
+        if (selectedTask) {
+          savedTask = await updateTask(selectedTask.id, taskData);
+        } else {
+          savedTask = await createTask(taskData);
+        }
+      } catch (backendErr) {
+        // Direct client/cloud creation
+        savedTask = {
+          id: selectedTask ? selectedTask.id : Date.now(),
+          ...taskData,
+          status: selectedTask ? selectedTask.status : 'pending',
+          created_at: selectedTask?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
       }
-      if (currentUser?.email && savedTask) {
-        syncTaskToFirestore(currentUser.email, savedTask).catch(console.warn);
+
+      // Sync to Cloud Firestore
+      if (userIdentifier && savedTask) {
+        await syncTaskToFirestore(userIdentifier, savedTask);
       }
+
       setSelectedTask(null);
+      // Optimistic update
+      setTasks(prev => {
+        const index = prev.findIndex(t => String(t.id) === String(savedTask.id));
+        if (index >= 0) {
+          const copy = [...prev];
+          copy[index] = savedTask;
+          return copy;
+        }
+        return [savedTask, ...prev];
+      });
       loadTasks();
     } catch (err) {
       alert(`Operation failed: ${err.message}`);
@@ -118,11 +193,26 @@ function App() {
 
   const handleCompleteTask = async (taskId) => {
     try {
-      const updated = await completeTask(taskId);
-      if (currentUser?.email && updated) {
-        syncTaskToFirestore(currentUser.email, updated).catch(console.warn);
+      const userIdentifier = currentUser?.uid || currentUser?.email;
+      let updated = null;
+      try {
+        updated = await completeTask(taskId);
+      } catch (backendErr) {
+        const existing = tasks.find(t => String(t.id) === String(taskId));
+        if (existing) {
+          updated = { 
+            ...existing, 
+            status: existing.status === 'completed' ? 'pending' : 'completed',
+            updated_at: new Date().toISOString()
+          };
+        }
       }
-      loadTasks();
+
+      if (userIdentifier && updated) {
+        await syncTaskToFirestore(userIdentifier, updated);
+      }
+
+      setTasks(prev => prev.map(t => String(t.id) === String(taskId) ? (updated || { ...t, status: t.status === 'completed' ? 'pending' : 'completed' }) : t));
     } catch (err) {
       alert(`Complete task failed: ${err.message}`);
     }
@@ -131,11 +221,16 @@ function App() {
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
-      await deleteTask(taskId);
-      if (currentUser?.email) {
-        deleteTaskFromFirestore(currentUser.email, taskId).catch(console.warn);
+      const userIdentifier = currentUser?.uid || currentUser?.email;
+      try {
+        await deleteTask(taskId);
+      } catch (backendErr) {
+        console.log('[Backend delete skipped, deleting from Firestore]');
       }
-      loadTasks();
+      if (userIdentifier) {
+        await deleteTaskFromFirestore(userIdentifier, taskId);
+      }
+      setTasks(prev => prev.filter(t => String(t.id) !== String(taskId)));
     } catch (err) {
       alert(`Delete task failed: ${err.message}`);
     }
@@ -151,9 +246,18 @@ function App() {
     setActiveTab('ai');
   };
 
+  // Filter tasks if searchQuery is active
+  const displayedTasks = searchQuery 
+    ? tasks.filter(t => 
+        (t.title && t.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : tasks;
+
   // Stats calculation
-  const pendingCount = tasks.filter(t => t.status === 'pending').length;
-  const completedCount = tasks.filter(t => t.status === 'completed').length;
+  const pendingCount = displayedTasks.filter(t => t.status === 'pending').length;
+  const completedCount = displayedTasks.filter(t => t.status === 'completed').length;
 
   return (
     <div className="flex min-h-screen bg-[#0b0f19] text-slate-100 font-sans relative">
@@ -195,7 +299,7 @@ function App() {
         <main className="flex-1 overflow-y-auto pb-12">
           {activeTab === 'dashboard' && (
             <DashboardView
-              tasks={tasks}
+              tasks={displayedTasks}
               onComplete={handleCompleteTask}
               onOpenModal={() => { setSelectedTask(null); setIsModalOpen(true); }}
               onSwitchToAI={handleSwitchToAI}
@@ -205,7 +309,7 @@ function App() {
 
           {activeTab === 'tasks' && (
             <TasksView
-              tasks={tasks}
+              tasks={displayedTasks}
               onComplete={handleCompleteTask}
               onDelete={handleDeleteTask}
               onEdit={handleOpenEditModal}
