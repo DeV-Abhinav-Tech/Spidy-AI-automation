@@ -4,7 +4,7 @@
   "private": true,
   "description": "Spidy AI Task Automation Assistant - Fullstack FastAPI & React Vite",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
+    "build": "cd frontend && npm install --ignore-scripts && npm run build",
     "start": "cd frontend && npm run preview"
   }
 }

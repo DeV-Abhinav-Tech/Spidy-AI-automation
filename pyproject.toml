@@ -1,0 +1,16 @@
+[project]
+name = "spidy-ai-automation"
+version = "1.0.0"
+description = "Spidy AI Task Automation Assistant"
+dependencies = [
+    "fastapi>=0.109.0",
+    "sqlalchemy>=2.0.25",
+    "pydantic>=2.6.0",
+    "httpx>=0.26.0",
+    "apscheduler>=3.10.4",
+    "google-genai>=0.1.1",
+    "python-dotenv>=1.0.0"
+]
+
+[tool.vercel]
+entrypoint = "backend.app.main:app"

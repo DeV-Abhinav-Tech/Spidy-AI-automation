@@ -29,3 +29,5 @@ frontend/dist-ssr/
 .DS_Store
 Thumbs.db
 
+.vercel
+.env*

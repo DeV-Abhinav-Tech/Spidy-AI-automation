@@ -1,4 +1,15 @@
+import sys
 import os
+
+# Add backend and root directories to sys.path so 'app.*' imports work from any working directory
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.dirname(current_file_dir)
+root_dir = os.path.dirname(backend_dir)
+
+for path_dir in [backend_dir, root_dir]:
+    if path_dir not in sys.path:
+        sys.path.insert(0, path_dir)
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +79,33 @@ app.include_router(users.router)
 @app.get("/api/reminders/")
 def get_reminders():
     return []
+
+# Serve React Vite static build if available
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+possible_dist_dirs = [
+    os.path.join(root_dir, "frontend", "dist"),
+    os.path.join(backend_dir, "frontend", "dist"),
+    os.path.join(current_file_dir, "dist"),
+]
+dist_dir = None
+for candidate in possible_dist_dirs:
+    if os.path.isdir(candidate) and os.path.isfile(os.path.join(candidate, "index.html")):
+        dist_dir = candidate
+        break
+
+if dist_dir:
+    assets_dir = os.path.join(dist_dir, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_frontend(full_path: str):
+        target = os.path.join(dist_dir, full_path)
+        if os.path.isfile(target):
+            return FileResponse(target)
+        return FileResponse(os.path.join(dist_dir, "index.html"))
 
 if __name__ == "__main__":
     import uvicorn

@@ -2,18 +2,23 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# On Vercel / serverless platforms, default SQLite to /tmp which is writable
-if os.getenv("VERCEL"):
-    default_db = "sqlite:////tmp/tasks.db"
+# Handle DATABASE_URL with validation against empty or unparseable strings
+db_url_env = os.getenv("DATABASE_URL", "").strip()
+if not db_url_env or db_url_env.startswith("[") or len(db_url_env) < 5:
+    if os.getenv("VERCEL"):
+        DATABASE_URL = "sqlite:////tmp/tasks.db"
+    else:
+        DATABASE_URL = "sqlite:///./tasks.db"
 else:
-    default_db = "sqlite:///./tasks.db"
+    DATABASE_URL = db_url_env
 
-DATABASE_URL = os.getenv("DATABASE_URL", default_db)
-
-# For SQLite, connect_args={"check_same_thread": False} is required
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+try:
+    connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    engine = create_engine(DATABASE_URL, connect_args=connect_args)
+except Exception as e:
+    print(f"[Session Warning] Failed to parse engine for {DATABASE_URL}: {e}. Falling back to SQLite.")
+    DATABASE_URL = "sqlite:////tmp/tasks.db" if os.getenv("VERCEL") else "sqlite:///./tasks.db"
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
